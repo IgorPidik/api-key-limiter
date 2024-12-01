@@ -1,6 +1,6 @@
 #!/bin/bash
 set -ex
-# generate CA's  key
+# generate CA's key
 openssl genrsa -aes256 -passout pass:1 -out ca.key.pem 4096
 openssl rsa -passin pass:1 -in ca.key.pem -out ca.key.pem.tmp
 mv ca.key.pem.tmp ca.key.pem
