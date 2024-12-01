@@ -1,10 +1,25 @@
 package proxy
 
 import (
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 )
+
+func hijackConnection(writer http.ResponseWriter) (net.Conn, error) {
+	hij, ok := writer.(http.Hijacker)
+	if !ok {
+		return nil, ErrFailedToConvertConnectionToHijacker
+	}
+
+	proxyClient, _, err := hij.Hijack()
+	if err != nil {
+		return nil, err
+	}
+
+	return proxyClient, nil
+}
 
 func setTarget(req *http.Request, targetHost string) error {
 	if !strings.HasPrefix(targetHost, "https") {

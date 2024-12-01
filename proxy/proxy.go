@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -25,29 +26,40 @@ func NewProxy() *Proxy {
 }
 
 func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request) {
-	hij, ok := writer.(http.Hijacker)
-	if !ok {
-		log.Fatal("cannot convert connection to hijacker")
+	tlsConn, tlsConnErr := p.createProxyConnection(writer, proxyRequest)
+	if tlsConnErr != nil {
+		log.Printf("failed to create proxy connection: %w", tlsConnErr)
+		// TODO: write error response to client
+		return
 	}
+	defer tlsConn.Close()
 
-	proxyClient, _, e := hij.Hijack()
-	if e != nil {
-		panic("cannot hijack connection " + e.Error())
+	if err := p.handleProxyConnection(tlsConn, proxyRequest.Host); err != nil {
+		log.Printf("an error has occured while proxing the connection: %w", err)
+		// TODO: write error response to tlsConn
+		return
+	}
+}
+
+func (p *Proxy) createProxyConnection(writer http.ResponseWriter, proxyRequest *http.Request) (*tls.Conn, error) {
+	proxyClient, hijackErr := hijackConnection(writer)
+	if hijackErr != nil {
+		return nil, hijackErr
 	}
 
 	host, _, err := net.SplitHostPort(proxyRequest.Host)
 	if err != nil {
-		log.Fatal("error splitting host/port:", err)
+		return nil, fmt.Errorf("failed to split host/port: %w", err)
 	}
 
 	pemCert, pemKey := createCert([]string{host}, p.cert.Leaf, p.cert.PrivateKey, 240)
 	tlsCert, err := tls.X509KeyPair(pemCert, pemKey)
 	if err != nil {
-		log.Fatal("failed to create cert:", err)
+		return nil, fmt.Errorf("failed to create certs: %w", err)
 	}
 
 	if _, err := proxyClient.Write([]byte("HTTP/1.1 200 OK\r\n\r\n")); err != nil {
-		log.Fatal("error writing status to client:", err)
+		return nil, fmt.Errorf("failed to write status to client: %w", err)
 	}
 
 	tlsConfig := &tls.Config{
@@ -55,31 +67,31 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 		Certificates:     []tls.Certificate{tlsCert},
 	}
 
-	tlsConn := tls.Server(proxyClient, tlsConfig)
-	defer tlsConn.Close()
-	p.handleProxyConnection(tlsConn, proxyRequest.Host)
-
+	return tls.Server(proxyClient, tlsConfig), nil
 }
 
-func (p *Proxy) handleProxyConnection(tlsConn *tls.Conn, originalHost string) {
+func (p *Proxy) handleProxyConnection(tlsConn *tls.Conn, originalHost string) error {
 	connReader := bufio.NewReader(tlsConn)
 	for {
 		r, err := http.ReadRequest(connReader)
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			log.Fatal("request reader err", err)
+			return fmt.Errorf("failed to read the request: %w", err)
 		}
-		// We can dump the request; log it, modify it...
+
+		// read client request
 		if b, err := httputil.DumpRequest(r, false); err == nil {
 			log.Printf("incoming request:\n%s\n", string(b))
 		}
 
+		// fowrward the request
 		if err := setTarget(r, originalHost); err != nil {
-			log.Fatalf("failed to update request target: %w\n", err)
+			return fmt.Errorf("failed to update request target", err)
 		}
 
 		log.Println("forwarding request to target...")
+
 		var netTransport = &http.Transport{
 			Dial: (&net.Dialer{
 				Timeout: 5 * time.Second,
@@ -94,7 +106,7 @@ func (p *Proxy) handleProxyConnection(tlsConn *tls.Conn, originalHost string) {
 
 		resp, err := netClient.Do(r)
 		if err != nil {
-			log.Fatal("error sending request to target:", err)
+			return fmt.Errorf("error forwarding request to the original target: %w", err)
 		}
 
 		if b, err := httputil.DumpResponse(resp, false); err == nil {
@@ -104,7 +116,9 @@ func (p *Proxy) handleProxyConnection(tlsConn *tls.Conn, originalHost string) {
 
 		// send the response back to the client
 		if err := resp.Write(tlsConn); err != nil {
-			log.Println("error writing response back:", err)
+			return fmt.Errorf("error forwarding response to the original client: %w", err)
 		}
+
 	}
+	return nil
 }
