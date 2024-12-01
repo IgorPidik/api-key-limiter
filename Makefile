@@ -1,3 +1,5 @@
+run:
+	go run .
 test:
 	https_proxy=localhost:8000 curl -v https://example.org --cacert certs/ca.pem
 test2:

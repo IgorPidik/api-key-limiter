@@ -16,13 +16,13 @@ type Proxy struct {
 	cert *tls.Certificate
 }
 
-func NewProxy() *Proxy {
+func NewProxy() (*Proxy, error) {
 	cert, certErr := loadCA()
 	if certErr != nil {
-		log.Fatalf("failed to load certs: %v\n", certErr)
+		return nil, fmt.Errorf("failed to load certs: %w", certErr)
 	}
 
-	return &Proxy{cert}
+	return &Proxy{cert}, nil
 }
 
 func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request) {
