@@ -29,14 +29,14 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 	tlsConn, tlsConnErr := p.createProxyConnection(writer, proxyRequest)
 	if tlsConnErr != nil {
 		log.Printf("failed to create proxy connection: %w", tlsConnErr)
-		// TODO: write error response to client
+		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
 		return
 	}
 	defer tlsConn.Close()
 
 	if err := p.handleProxyConnection(tlsConn, proxyRequest.Host); err != nil {
-		log.Printf("an error has occured while proxing the connection: %w", err)
-		// TODO: write error response to tlsConn
+		log.Printf("an error has occurred while proxing the connection: %w", err)
+		tlsConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 		return
 	}
 }
