@@ -6,6 +6,9 @@ default_md	= sha256
 subjectKeyIdentifier=hash
 authorityKeyIdentifier=keyid:always,issuer
 basicConstraints = critical,CA:true
+subjectAltName = @alt_names
+[alt_names]
+DNS.1 = localhost 
 [ req ]
 distinguished_name	= req_distinguished_name
 [ req_distinguished_name ]
@@ -27,7 +30,7 @@ organizationalUnitName		= Organizational Unit Name (eg, section)
 organizationalUnitName_default	= ApiKeyLimiter
 
 commonName			= Common Name (e.g. server FQDN or YOUR name)
-commonName_default		= ApiKeyLimiter  
+commonName_default		= localhost  
 commonName_max			= 64
 
 emailAddress			= Email Address
