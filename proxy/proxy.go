@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"api-key-limiter/handlers"
+	"api-key-limiter/models"
 	"bufio"
 	"crypto/tls"
 	"fmt"
@@ -13,29 +15,44 @@ import (
 )
 
 type Proxy struct {
-	cert *tls.Certificate
+	cert           *tls.Certificate
+	projectHandler *handlers.ProjectHandler
 }
 
-func NewProxy() (*Proxy, error) {
+func NewProxy(projectHandler *handlers.ProjectHandler) (*Proxy, error) {
 	cert, certErr := loadCA()
 	if certErr != nil {
 		return nil, fmt.Errorf("failed to load certs: %w", certErr)
 	}
 
-	return &Proxy{cert}, nil
+	return &Proxy{cert, projectHandler}, nil
 }
 
 func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request) {
+	// TODO: validate api key & project
+	configs, configsErr := p.projectHandler.GetConfigs("88bbcc17-096a-40fb-9b32-b519ad834cea")
+	if configsErr != nil {
+		log.Printf("failed to get configs: %w\n", configsErr)
+		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
+		return
+	}
+
+	if len(configs) != 1 {
+		log.Printf("unexpected number of configs, expected 1 got %d\n", len(configs))
+		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
+		return
+	}
+
 	tlsConn, tlsConnErr := p.createProxyConnection(writer, proxyRequest)
 	if tlsConnErr != nil {
-		log.Printf("failed to create proxy connection: %w", tlsConnErr)
+		log.Printf("failed to create proxy connection: %w\n", tlsConnErr)
 		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
 		return
 	}
 	defer tlsConn.Close()
 
-	if err := p.handleProxyConnection(tlsConn, proxyRequest.Host); err != nil {
-		log.Printf("an error has occurred while proxing the connection: %w", err)
+	if err := p.handleProxyConnection(tlsConn, proxyRequest.Host, &configs[0]); err != nil {
+		log.Printf("an error has occurred while proxing the connection: %w\n", err)
 		tlsConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 		return
 	}
@@ -73,7 +90,7 @@ func (p *Proxy) createProxyConnection(writer http.ResponseWriter, proxyRequest *
 	return tls.Server(proxyClient, tlsConfig), nil
 }
 
-func (p *Proxy) handleProxyConnection(tlsConn *tls.Conn, originalHost string) error {
+func (p *Proxy) handleProxyConnection(tlsConn *tls.Conn, originalHost string, config *models.Config) error {
 	connReader := bufio.NewReader(tlsConn)
 	for {
 		r, err := http.ReadRequest(connReader)
@@ -83,45 +100,58 @@ func (p *Proxy) handleProxyConnection(tlsConn *tls.Conn, originalHost string) er
 			return fmt.Errorf("failed to read the request: %w", err)
 		}
 
-		// read client request
-		if b, err := httputil.DumpRequest(r, false); err == nil {
-			log.Printf("incoming request:\n%s\n", string(b))
+		if err := p.handleProxyRequest(tlsConn, r, originalHost, config); err != nil {
+			return err
 		}
-
-		// fowrward the request
-		if err := setTarget(r, originalHost); err != nil {
-			return fmt.Errorf("failed to update request target", err)
-		}
-
-		log.Println("forwarding request to target...")
-
-		var netTransport = &http.Transport{
-			Dial: (&net.Dialer{
-				Timeout: 5 * time.Second,
-			}).Dial,
-			TLSHandshakeTimeout: 5 * time.Second,
-		}
-
-		var netClient = &http.Client{
-			Timeout:   time.Second * 30,
-			Transport: netTransport,
-		}
-
-		resp, err := netClient.Do(r)
-		if err != nil {
-			return fmt.Errorf("error forwarding request to the original target: %w", err)
-		}
-
-		if b, err := httputil.DumpResponse(resp, false); err == nil {
-			log.Printf("target response:\n%s\n", string(b))
-		}
-		defer resp.Body.Close()
-
-		// send the response back to the client
-		if err := resp.Write(tlsConn); err != nil {
-			return fmt.Errorf("error forwarding response to the original client: %w", err)
-		}
-
 	}
+	return nil
+}
+
+func (p *Proxy) handleProxyRequest(tlsConn *tls.Conn, r *http.Request, originalHost string, config *models.Config) error {
+	if b, err := httputil.DumpRequest(r, false); err == nil {
+		log.Printf("incoming request:\n%s\n", string(b))
+	}
+
+	// update request
+	if err := setTarget(r, originalHost); err != nil {
+		return fmt.Errorf("failed to update request target", err)
+	}
+
+	r.Header.Set(config.HeaderName, config.HeaderValue)
+
+	if b, err := httputil.DumpRequest(r, false); err == nil {
+		log.Printf("updated request:\n%s\n", string(b))
+	}
+
+	var netTransport = &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout: 5 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 5 * time.Second,
+	}
+
+	var netClient = &http.Client{
+		Timeout:   time.Second * 30,
+		Transport: netTransport,
+	}
+
+	// fowrward the request
+	log.Println("forwarding request to target...")
+
+	resp, err := netClient.Do(r)
+	if err != nil {
+		return fmt.Errorf("error forwarding request to the original target: %w", err)
+	}
+
+	if b, err := httputil.DumpResponse(resp, false); err == nil {
+		log.Printf("target response:\n%s\n", string(b))
+	}
+	defer resp.Body.Close()
+
+	// send the response back to the client
+	if err := resp.Write(tlsConn); err != nil {
+		return fmt.Errorf("error forwarding response to the original client: %w", err)
+	}
+
 	return nil
 }
