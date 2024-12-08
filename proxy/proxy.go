@@ -42,6 +42,9 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 }
 
 func (p *Proxy) createProxyConnection(writer http.ResponseWriter, proxyRequest *http.Request) (*tls.Conn, error) {
+	if b, err := httputil.DumpRequest(proxyRequest, false); err == nil {
+		log.Printf("incoming proxy request:\n%s\n", string(b))
+	}
 	proxyClient, hijackErr := hijackConnection(writer)
 	if hijackErr != nil {
 		return nil, hijackErr
