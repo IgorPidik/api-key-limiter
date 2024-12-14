@@ -29,16 +29,22 @@ func NewProxy(projectHandler *handlers.ProjectHandler) (*Proxy, error) {
 }
 
 func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request) {
-	// TODO: validate api key & project
-	configs, configsErr := p.projectHandler.GetConfigs("88bbcc17-096a-40fb-9b32-b519ad834cea")
-	if configsErr != nil {
-		log.Printf("failed to get configs: %w\n", configsErr)
+	projectID, ok := proxyRequest.Context().Value("ProjectID").(string)
+	if !ok || projectID == "" {
+		log.Println("context is missing projectID")
 		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
 		return
 	}
 
-	if len(configs) != 1 {
-		log.Printf("unexpected number of configs, expected 1 got %d\n", len(configs))
+	configID := "88bbcc17-096a-40fb-9b32-b519ad834cea"
+	config, configErr := p.projectHandler.GetConfig(projectID, configID)
+
+	if configErr != nil {
+		if configErr == handlers.ErrConfigDoesNotExist {
+			http.Error(writer, "Config does not exist", http.StatusBadRequest)
+			return
+		}
+		log.Printf("failed to get config: %w\n", configErr)
 		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
 		return
 	}
@@ -51,7 +57,7 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 	}
 	defer tlsConn.Close()
 
-	if err := p.handleProxyConnection(tlsConn, proxyRequest.Host, &configs[0]); err != nil {
+	if err := p.handleProxyConnection(tlsConn, proxyRequest.Host, config); err != nil {
 		log.Printf("an error has occurred while proxing the connection: %w\n", err)
 		tlsConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 		return

@@ -2,6 +2,7 @@ package main
 
 import (
 	"api-key-limiter/handlers"
+	"api-key-limiter/middleware"
 	"api-key-limiter/proxy"
 	"database/sql"
 	"fmt"
@@ -41,6 +42,7 @@ func connectToDb() *sql.DB {
 func main() {
 	db := connectToDb()
 	projectHandler := handlers.NewProjectHandler(db)
+	authMiddleware := middleware.NewAuthMiddleware(projectHandler)
 
 	url := "0.0.0.0:9000"
 	proxy, proxyErr := proxy.NewProxy(projectHandler)
@@ -50,5 +52,5 @@ func main() {
 	}
 
 	log.Printf("Starting Proxy server on %s\n", url)
-	log.Fatal(http.ListenAndServeTLS(url, "certs/ca.pem", "certs/ca.key.pem", proxy))
+	log.Fatal(http.ListenAndServeTLS(url, "certs/ca.pem", "certs/ca.key.pem", authMiddleware.Auth(proxy)))
 }
