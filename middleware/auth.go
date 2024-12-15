@@ -8,6 +8,7 @@ import (
 )
 
 type ParsedAuthHeader struct {
+	ConfigID  string
 	ProjectID string
 	AccessKey string
 }
@@ -23,7 +24,6 @@ func NewAuthMiddleware(projectHandler *handlers.ProjectHandler) *AuthMiddleware 
 func (a *AuthMiddleware) Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		fmt.Printf("project id: %s\n", "test")
 		fmt.Printf("project header: %v\n", r.Header)
 		authHeader, parsingErr := ParseAuthHeader(r.Header.Get("Proxy-Authorization"))
 		if parsingErr != nil {
@@ -42,10 +42,9 @@ func (a *AuthMiddleware) Auth(next http.Handler) http.Handler {
 			return
 		}
 
-		fmt.Printf("project id: %s\n", authHeader.ProjectID)
-
-		// pass project ID to handlers
-		ctx := context.WithValue(r.Context(), "ProjectID", authHeader.ProjectID)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		// pass project & config IDs to handlers
+		ctxWithProjectID := context.WithValue(r.Context(), "ProjectID", authHeader.ProjectID)
+		ctxWithConfigID := context.WithValue(ctxWithProjectID, "ConfigID", authHeader.ConfigID)
+		next.ServeHTTP(w, r.WithContext(ctxWithConfigID))
 	})
 }

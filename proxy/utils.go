@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 func hijackConnection(writer http.ResponseWriter) (net.Conn, error) {
@@ -36,4 +38,9 @@ func setTarget(req *http.Request, targetHost string) error {
 	req.URL = targetUrl
 	req.RequestURI = ""
 	return nil
+}
+
+func uuidValid(u string) bool {
+	_, err := uuid.Parse(u)
+	return err == nil
 }

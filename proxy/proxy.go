@@ -29,16 +29,21 @@ func NewProxy(projectHandler *handlers.ProjectHandler) (*Proxy, error) {
 }
 
 func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request) {
-	projectID, ok := proxyRequest.Context().Value("ProjectID").(string)
-	if !ok || projectID == "" {
+	projectID, projectIDOk := proxyRequest.Context().Value("ProjectID").(string)
+	if !projectIDOk || !uuidValid(projectID) {
 		log.Println("context is missing projectID")
 		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
 		return
 	}
 
-	configID := "88bbcc17-096a-40fb-9b32-b519ad834cea"
-	config, configErr := p.projectHandler.GetConfig(projectID, configID)
+	configID, configIDOk := proxyRequest.Context().Value("ConfigID").(string)
+	if !configIDOk || !uuidValid(configID) {
+		log.Println("context is missing configID")
+		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
+		return
+	}
 
+	config, configErr := p.projectHandler.GetConfig(projectID, configID)
 	if configErr != nil {
 		if configErr == handlers.ErrConfigDoesNotExist {
 			http.Error(writer, "Config does not exist", http.StatusBadRequest)

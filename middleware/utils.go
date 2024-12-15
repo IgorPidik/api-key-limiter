@@ -22,12 +22,13 @@ func ParseAuthHeader(authHeader string) (*ParsedAuthHeader, error) {
 	}
 
 	authParts := strings.Split(string(data), ":")
-	if len(authParts) != 2 {
+	if len(authParts) != 3 {
 		return nil, errors.New("invalid auth header format")
 	}
 
 	return &ParsedAuthHeader{
 		authParts[0],
 		authParts[1],
+		authParts[2],
 	}, nil
 }
