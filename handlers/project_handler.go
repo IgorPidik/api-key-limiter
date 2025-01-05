@@ -41,14 +41,14 @@ func (p *ProjectHandler) ValidateProjectIdAndAccessKey(projectID string, accessK
 
 func (p *ProjectHandler) GetConfig(projectID string, configID string) (*models.Config, error) {
 	query := `
-		SELECT id, project_id, header_name, header_value
+		SELECT id, project_id, header_name, header_value, limit_requests_count, limit_duration
 		FROM configs
 		WHERE id = $1 AND project_id = $2 
 	`
 
 	var config models.Config
 	if err := p.db.QueryRow(query, configID, projectID).Scan(
-		&config.ID, &config.ProjectID, &config.HeaderName, &config.HeaderValue,
+		&config.ID, &config.ProjectID, &config.HeaderName, &config.HeaderValue, &config.LimitNumberOfRequests, &config.LimitPer,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrConfigDoesNotExist

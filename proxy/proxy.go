@@ -4,6 +4,7 @@ import (
 	"api-key-limiter/handlers"
 	"api-key-limiter/models"
 	"bufio"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -12,20 +13,23 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"time"
+
+	"github.com/go-redis/redis_rate/v10"
 )
 
 type Proxy struct {
 	cert           *tls.Certificate
 	projectHandler *handlers.ProjectHandler
+	limiter        *redis_rate.Limiter
 }
 
-func NewProxy(projectHandler *handlers.ProjectHandler) (*Proxy, error) {
+func NewProxy(projectHandler *handlers.ProjectHandler, limiter *redis_rate.Limiter) (*Proxy, error) {
 	cert, certErr := loadCA()
 	if certErr != nil {
 		return nil, fmt.Errorf("failed to load certs: %w", certErr)
 	}
 
-	return &Proxy{cert, projectHandler}, nil
+	return &Proxy{cert, projectHandler, limiter}, nil
 }
 
 func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request) {
@@ -46,12 +50,26 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 	config, configErr := p.projectHandler.GetConfig(projectID, configID)
 	if configErr != nil {
 		if configErr == handlers.ErrConfigDoesNotExist {
+			log.Println("Config does not exist")
 			http.Error(writer, "Config does not exist", http.StatusBadRequest)
 			return
 		}
 		log.Printf("failed to get config: %v\n", configErr)
 		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
 		return
+	}
+
+	// check limit rating
+	limitKey := fmt.Sprintf("%s:%s", projectID, configID)
+	res, err := p.limiter.Allow(context.Background(), limitKey, redis_rate.PerMinute(2))
+	if err != nil {
+		log.Printf("failed to get rate limit: %v\n", err)
+		http.Error(writer, "Failed to get rate limit", http.StatusInternalServerError)
+		return
+	}
+
+	if res.Allowed < 1 {
+		http.Error(writer, "Too many requests", http.StatusTooManyRequests)
 	}
 
 	tlsConn, tlsConnErr := p.createProxyConnection(writer, proxyRequest)

@@ -1,8 +1,10 @@
 package models
 
 type Config struct {
-	ID          string
-	ProjectID   string
-	HeaderName  string
-	HeaderValue string
+	ID                    string
+	ProjectID             string
+	HeaderName            string
+	HeaderValue           string
+	LimitNumberOfRequests int
+	LimitPer              string
 }
