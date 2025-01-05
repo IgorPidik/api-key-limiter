@@ -48,7 +48,7 @@ func main() {
 	proxy, proxyErr := proxy.NewProxy(projectHandler)
 
 	if proxyErr != nil {
-		log.Fatalf("failed to create proxy: %w\n", proxyErr)
+		log.Fatalf("failed to create proxy: %v\n", proxyErr)
 	}
 
 	log.Printf("Starting Proxy server on %s\n", url)

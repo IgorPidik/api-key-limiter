@@ -4,6 +4,7 @@ import (
 	"api-key-limiter/handlers"
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -33,7 +34,7 @@ func (a *AuthMiddleware) Auth(next http.Handler) http.Handler {
 
 		validationErr := a.projectHandler.ValidateProjectIdAndAccessKey(authHeader.ProjectID, authHeader.AccessKey)
 		if validationErr != nil {
-			fmt.Printf("failed to validate request auth: %w\n", validationErr)
+			log.Printf("failed to validate request auth: %v\n", validationErr)
 			if validationErr == handlers.ErrInvalidProjectIdAndAccessKeyCombination {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return

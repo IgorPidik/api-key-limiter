@@ -49,21 +49,21 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 			http.Error(writer, "Config does not exist", http.StatusBadRequest)
 			return
 		}
-		log.Printf("failed to get config: %w\n", configErr)
+		log.Printf("failed to get config: %v\n", configErr)
 		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
 		return
 	}
 
 	tlsConn, tlsConnErr := p.createProxyConnection(writer, proxyRequest)
 	if tlsConnErr != nil {
-		log.Printf("failed to create proxy connection: %w\n", tlsConnErr)
+		log.Printf("failed to create proxy connection: %v\n", tlsConnErr)
 		http.Error(writer, "Unable to process the request", http.StatusInternalServerError)
 		return
 	}
 	defer tlsConn.Close()
 
 	if err := p.handleProxyConnection(tlsConn, proxyRequest.Host, config); err != nil {
-		log.Printf("an error has occurred while proxing the connection: %w\n", err)
+		log.Printf("an error has occurred while proxing the connection: %v\n", err)
 		tlsConn.Write([]byte("HTTP/1.1 500 Internal Server Error\r\n\r\n"))
 		return
 	}
@@ -125,7 +125,7 @@ func (p *Proxy) handleProxyRequest(tlsConn *tls.Conn, r *http.Request, originalH
 
 	// update request
 	if err := setTarget(r, originalHost); err != nil {
-		return fmt.Errorf("failed to update request target", err)
+		return fmt.Errorf("failed to update request target: %w", err)
 	}
 
 	r.Header.Set(config.HeaderName, config.HeaderValue)
