@@ -59,17 +59,17 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 		return
 	}
 
-	// check limit rating
-	limitKey := fmt.Sprintf("%s:%s", projectID, configID)
-	res, err := p.limiter.Allow(context.Background(), limitKey, redis_rate.PerMinute(2))
-	if err != nil {
-		log.Printf("failed to get rate limit: %v\n", err)
+	exceedsRateLimit, rateLimitErr := p.checkExceedsRateLimit(config)
+	if rateLimitErr != nil {
+		log.Printf("failed to get rate limit: %v\n", rateLimitErr)
 		http.Error(writer, "Failed to get rate limit", http.StatusInternalServerError)
 		return
+
 	}
 
-	if res.Allowed < 1 {
+	if exceedsRateLimit {
 		http.Error(writer, "Too many requests", http.StatusTooManyRequests)
+		return
 	}
 
 	tlsConn, tlsConnErr := p.createProxyConnection(writer, proxyRequest)
@@ -183,4 +183,15 @@ func (p *Proxy) handleProxyRequest(tlsConn *tls.Conn, r *http.Request, originalH
 	}
 
 	return nil
+}
+
+func (p *Proxy) checkExceedsRateLimit(config *models.Config) (bool, error) {
+	// check limit rating
+	limitKey := fmt.Sprintf("%s:%s", config.ProjectID, config.ID)
+	res, err := p.limiter.Allow(context.Background(), limitKey, redis_rate.PerMinute(2))
+	if err != nil {
+		return false, err
+	}
+
+	return res.Allowed < 1, nil
 }
