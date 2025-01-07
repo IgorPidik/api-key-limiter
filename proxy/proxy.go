@@ -33,6 +33,7 @@ func NewProxy(projectHandler *handlers.ProjectHandler, limiter *redis_rate.Limit
 }
 
 func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request) {
+	// parse project and config IDs
 	projectID, projectIDOk := proxyRequest.Context().Value("ProjectID").(string)
 	if !projectIDOk || !uuidValid(projectID) {
 		log.Println("context is missing projectID")
@@ -47,6 +48,7 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 		return
 	}
 
+	// fetch config details
 	config, configErr := p.projectHandler.GetConfig(projectID, configID)
 	if configErr != nil {
 		if configErr == handlers.ErrConfigDoesNotExist {
@@ -59,6 +61,7 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 		return
 	}
 
+	// rate limit
 	exceedsRateLimit, rateLimitErr := p.checkExceedsRateLimit(config)
 	if rateLimitErr != nil {
 		log.Printf("failed to get rate limit: %v\n", rateLimitErr)
@@ -72,6 +75,7 @@ func (p *Proxy) ServeHTTP(writer http.ResponseWriter, proxyRequest *http.Request
 		return
 	}
 
+	// create proxy connection
 	tlsConn, tlsConnErr := p.createProxyConnection(writer, proxyRequest)
 	if tlsConnErr != nil {
 		log.Printf("failed to create proxy connection: %v\n", tlsConnErr)
@@ -146,6 +150,7 @@ func (p *Proxy) handleProxyRequest(tlsConn *tls.Conn, r *http.Request, originalH
 		return fmt.Errorf("failed to update request target: %w", err)
 	}
 
+	// update headers
 	r.Header.Set(config.HeaderName, config.HeaderValue)
 
 	if b, err := httputil.DumpRequest(r, false); err == nil {
@@ -186,7 +191,6 @@ func (p *Proxy) handleProxyRequest(tlsConn *tls.Conn, r *http.Request, originalH
 }
 
 func (p *Proxy) checkExceedsRateLimit(config *models.Config) (bool, error) {
-	// check limit rating
 	limit, limitErr := getLimitForConfig(config)
 	if limitErr != nil {
 		return false, limitErr
