@@ -187,8 +187,13 @@ func (p *Proxy) handleProxyRequest(tlsConn *tls.Conn, r *http.Request, originalH
 
 func (p *Proxy) checkExceedsRateLimit(config *models.Config) (bool, error) {
 	// check limit rating
+	limit, limitErr := getLimitForConfig(config)
+	if limitErr != nil {
+		return false, limitErr
+	}
+
 	limitKey := fmt.Sprintf("%s:%s", config.ProjectID, config.ID)
-	res, err := p.limiter.Allow(context.Background(), limitKey, redis_rate.PerMinute(2))
+	res, err := p.limiter.Allow(context.Background(), limitKey, limit)
 	if err != nil {
 		return false, err
 	}
