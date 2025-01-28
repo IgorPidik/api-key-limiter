@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"os"
 	"time"
 
 	"github.com/go-redis/redis_rate/v10"
@@ -140,6 +141,18 @@ func (p *Proxy) handleProxyConnection(tlsConn *tls.Conn, originalHost string, co
 	return nil
 }
 
+func (p *Proxy) updateRequestHeaders(r *http.Request, config *models.Config) error {
+	for _, replacement := range config.HeaderReplacements {
+		value, err := DecryptData(replacement.HeaderValue)
+		if err != nil {
+			return fmt.Errorf("failed to decrypt header replacement: %w", err)
+		}
+		r.Header.Set(replacement.HeaderName, value)
+	}
+
+	return nil
+}
+
 func (p *Proxy) handleProxyRequest(tlsConn *tls.Conn, r *http.Request, originalHost string, config *models.Config) error {
 	if b, err := httputil.DumpRequest(r, false); err == nil {
 		log.Printf("incoming request:\n%s\n", string(b))
@@ -150,8 +163,9 @@ func (p *Proxy) handleProxyRequest(tlsConn *tls.Conn, r *http.Request, originalH
 		return fmt.Errorf("failed to update request target: %w", err)
 	}
 
-	// update headers
-	r.Header.Set(config.HeaderName, config.HeaderValue)
+	if err := p.updateRequestHeaders(r, config); err != nil {
+		return fmt.Errorf("failed to update request headers: %w", err)
+	}
 
 	if b, err := httputil.DumpRequest(r, false); err == nil {
 		log.Printf("updated request:\n%s\n", string(b))
