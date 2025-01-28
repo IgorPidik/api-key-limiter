@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 )
 
@@ -41,14 +42,14 @@ func (p *ProjectHandler) ValidateProjectIdAndAccessKey(projectID string, accessK
 
 func (p *ProjectHandler) GetConfig(projectID string, configID string) (*models.Config, error) {
 	query := `
-		SELECT id, project_id, header_name, header_value, limit_requests_count, limit_duration
+		SELECT id, project_id, limit_requests_count, limit_duration
 		FROM configs
 		WHERE id = $1 AND project_id = $2 
 	`
 
 	var config models.Config
 	if err := p.db.QueryRow(query, configID, projectID).Scan(
-		&config.ID, &config.ProjectID, &config.HeaderName, &config.HeaderValue, &config.LimitNumberOfRequests, &config.LimitPer,
+		&config.ID, &config.ProjectID, &config.LimitNumberOfRequests, &config.LimitPer,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, ErrConfigDoesNotExist
@@ -57,5 +58,38 @@ func (p *ProjectHandler) GetConfig(projectID string, configID string) (*models.C
 		return nil, fmt.Errorf("failed to query config data: %w", err)
 	}
 
+	headers, headersErr := p.ListHeaderReplacements(config.ID)
+	if headersErr != nil {
+		return nil, headersErr
+	}
+
+	config.HeaderReplacements = headers
 	return &config, nil
+}
+
+func (p *ProjectHandler) ListHeaderReplacements(configID uuid.UUID) ([]models.HeaderReplacement, error) {
+	query := `
+		SELECT id, config_id, header_name, header_value
+		FROM header_replacements
+		WHERE config_id = $1
+	`
+	rows, err := p.db.Query(query, configID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query header replacements: %v", err)
+	}
+	defer rows.Close()
+
+	var replacements []models.HeaderReplacement
+	for rows.Next() {
+		var replacement models.HeaderReplacement
+		if err := rows.Scan(
+			&replacement.ID, &replacement.ConfigID, &replacement.HeaderName, &replacement.HeaderValue,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan config row: %v", err)
+		}
+
+		replacements = append(replacements, replacement)
+	}
+
+	return replacements, nil
 }
