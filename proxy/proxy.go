@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"os"
 	"time"
 
 	"github.com/go-redis/redis_rate/v10"
