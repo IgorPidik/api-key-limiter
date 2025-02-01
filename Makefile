@@ -4,5 +4,5 @@ run:
 	go run .
 
 test:
-	https_proxy=https://${PROXY_CONFIG_ID}:${PROXY_PROJECT_ID}:${PROXY_ACCESS_KEY}@localhost:9000 curl --proxy-insecure -v --cacert certs/ca.pem https://google.com 
+	https_proxy=${PROXY_URL} curl --proxy-insecure -v --cacert certs/ca.pem https://google.com 
 
