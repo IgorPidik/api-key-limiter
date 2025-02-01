@@ -63,6 +63,30 @@ func getLimitForConfig(config *models.Config) (redis_rate.Limit, error) {
 			Burst:  config.LimitNumberOfRequests,
 			Period: time.Hour * 24,
 		}, nil
+	case "week":
+		return redis_rate.Limit{
+			Rate:   config.LimitNumberOfRequests,
+			Burst:  config.LimitNumberOfRequests,
+			Period: time.Hour * 24 * 7,
+		}, nil
+	case "month":
+		return redis_rate.Limit{
+			Rate:   config.LimitNumberOfRequests,
+			Burst:  config.LimitNumberOfRequests,
+			Period: time.Hour * 24 * 7 * 30,
+		}, nil
+	case "year":
+		return redis_rate.Limit{
+			Rate:   config.LimitNumberOfRequests,
+			Burst:  config.LimitNumberOfRequests,
+			Period: time.Hour * 24 * 7 * 30 * 12,
+		}, nil
+	case "forever":
+		return redis_rate.Limit{
+			Rate:   config.LimitNumberOfRequests,
+			Burst:  config.LimitNumberOfRequests,
+			Period: time.Hour * 24 * 7 * 30 * 12 * 40,
+		}, nil
 	default:
 		return redis_rate.PerSecond(0), fmt.Errorf("unsupported limit per unit: %s", config.LimitPer)
 	}
