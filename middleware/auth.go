@@ -23,7 +23,6 @@ func NewAuthMiddleware(projectHandler *handlers.ProjectHandler) *AuthMiddleware 
 
 func (a *AuthMiddleware) Auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		authHeader, parsingErr := ParseAuthHeader(r.Header.Get("Proxy-Authorization"))
 		if parsingErr != nil {
 			http.Error(w, "Invalid auth header", http.StatusBadRequest)
